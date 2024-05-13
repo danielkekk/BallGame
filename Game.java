@@ -1,6 +1,5 @@
 import javax.swing.*;
 import java.awt.*;
-import java.io.*;
 import java.awt.event.*; 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,14 +8,16 @@ import java.util.stream.Collectors;
 
 public class Game {
 
-    static final int NUMBER_OF_BALLS=20;
-    static final int WIDTH=800;
-    static final int HEIGHT=600;
+    static final String POINTS_PATH = "points.txt";
+    static final int MAX_NUMBER_OF_BALLS = 20;
+    static final int WIDTH = 800;
+    static final int HEIGHT = 600;
+
+    private IOHandler handler;
 
     private boolean stopped = false;
     private int elapsedTimeMillisec = 0;
     private int lastPoints;
-
 
     private ArrayList<Ball> balls;
     private int numOfActiveBalls;
@@ -24,57 +25,33 @@ public class Game {
     private int xPos;
     private int yPos;
 
+    private JLabel clockLabel;
+
     public Game() {
 
-        BufferedReader bufferedReader = null;
-
-        try {
-
-            File file = new File("points.txt");
-            FileReader fileReader = new FileReader(file);
-            bufferedReader = new BufferedReader(fileReader);
-
-            String line;
-            while ((line = bufferedReader.readLine()) != null) {
-                this.lastPoints = Integer.parseInt(line);
-            }
-            bufferedReader.close();
-
-        } catch(IOException ex) {
-            ex.printStackTrace();
-        } catch(NumberFormatException ex) {
-            this.lastPoints=0;
-        } finally {
-            try {
-                bufferedReader.close();
-            } catch(IOException  ex) {
-                ex.printStackTrace();
-            }
-        }
-
-        
         xPos=200;
         yPos=150;
 
+        handler = new IOHandler(Game.POINTS_PATH);
+        this.lastPoints = handler.readLastPoints();
+
         balls = new ArrayList<>();
-        for(int i=0; i<Game.NUMBER_OF_BALLS; i++) {
+        for(int i=0; i<Game.MAX_NUMBER_OF_BALLS; i++) {
             balls.add(new Ball());
         }
         balls.get(0).setActive(true);
         this.numOfActiveBalls = 1;
     }
     
-    public void go() {
+    public void start() {
 
         JFrame frame = new JFrame("Ball Game");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         MyDrawPanel drawPanel = new MyDrawPanel();
 
-        JLabel clockLabel = new JLabel("0");
-        Dimension dim = drawPanel.getSize();
-
+        clockLabel = new JLabel("0");
         JButton startBtn = new JButton("Start");
-        startBtn.addActionListener(e -> setStopped(false));
+        startBtn.addActionListener(e -> startGame());
         JButton resetBtn = new JButton("Reset");
         resetBtn.addActionListener(e -> {
             this.setBallsDefault(); elapsedTimeMillisec=0;
@@ -96,53 +73,16 @@ public class Game {
         while(true) {
             if(!isStopped()) {
 
-                List<Ball> activeBalls = this.getActiveBalls();
-                for(Ball activeBall: activeBalls) {
-                    activeBall.pushBall();
-                    activeBall.pullBall();
+                moveActiveBalls();
 
-                    if((activeBall.getYPos()+80)>=Game.HEIGHT) {
-                        activeBall.turnYVector();
-                    }
-                    if(activeBall.getYPos()<=0) {
-                        activeBall.turnYVector();
-                    }
-                    if((activeBall.getXPos()+80)>=Game.WIDTH) {
-                        activeBall.turnXVector();
-                    }
-                    if(activeBall.getXPos()<=0) {
-                        activeBall.turnXVector();
-                    }
-                    if(activeBall.isCollided(new Point(this.xPos,this.yPos),new Dimension(30,30))) {
-                        setStopped(true);
-
-                        FileWriter writer = null;
-                        try {
-
-                            writer = new FileWriter("points.txt");
-                            writer.write(Integer.toString(Math.round(elapsedTimeMillisec/1000)));
-                            writer.close();
-
-                            clockLabel.setText("GAME OVER! YOUR POINTS:" + Float.toString(elapsedTimeMillisec/1000));
-
-                        } catch(IOException ex) {
-                            ex.printStackTrace();
-                        } finally {
-                            try {
-                                writer.close();
-                            } catch(IOException  ex) {
-                                ex.printStackTrace();
-                            }
-                        }
-                    }
-                }
+                //tickTime
 
                 elapsedTimeMillisec += 25;
                 if((elapsedTimeMillisec % 1000) == 0) {
                     clockLabel.setText(Float.toString(elapsedTimeMillisec/1000)+"\nLAST: "+Integer.toString(this.lastPoints));
                 }
                 if((elapsedTimeMillisec % 10000) == 0) {
-                    if(this.numOfActiveBalls == Game.NUMBER_OF_BALLS) {
+                    if(this.numOfActiveBalls == Game.MAX_NUMBER_OF_BALLS) {
                         break;
                     }
                     balls.get(numOfActiveBalls).setActive(true);
@@ -177,8 +117,40 @@ public class Game {
         return activeBalls;
     }
 
-    public void setStopped(boolean stopped) {
-        this.stopped = stopped;
+    public void moveActiveBalls() {
+        List<Ball> activeBalls = this.getActiveBalls();
+        for(Ball activeBall: activeBalls) {
+            activeBall.pushBall();
+            activeBall.pullBall();
+
+            if((activeBall.getYPos()+80)>=Game.HEIGHT) {
+                activeBall.turnYVector();
+            }
+            if(activeBall.getYPos()<=0) {
+                activeBall.turnYVector();
+            }
+            if((activeBall.getXPos()+80)>=Game.WIDTH) {
+                activeBall.turnXVector();
+            }
+            if(activeBall.getXPos()<=0) {
+                activeBall.turnXVector();
+            }
+            if(activeBall.isCollided(new Point(this.xPos,this.yPos),new Dimension(30,30))) {
+                stopGame();
+
+                clockLabel.setText("GAME OVER! YOUR POINTS:" + Float.toString(elapsedTimeMillisec/1000));
+
+                handler.writeLastPoints(elapsedTimeMillisec/1000);
+            }
+        }
+    }
+
+    public void stopGame() {
+        this.stopped = true;
+    }
+
+    public void startGame() {
+        this.stopped = false;
     }
 
     public boolean isStopped() {
